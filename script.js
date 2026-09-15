@@ -44,6 +44,190 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     /* =====================================================
+       GOOGLE ANALYTICS 4
+    ====================================================== */
+
+    const analyticsState = {
+        engineStarted: false,
+        analysisTimer: null,
+        lastVerdict: null
+    };
+
+
+    function trackEvent(
+        eventName,
+        parameters = {}
+    ) {
+
+        if (
+            typeof window.gtag !== "function"
+        ) {
+            return;
+        }
+
+        window.gtag(
+            "event",
+            eventName,
+            parameters
+        );
+    }
+
+
+    function verdictKey(
+        title
+    ) {
+
+        return title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+    }
+
+
+    function markEngineStarted() {
+
+        if (
+            analyticsState.engineStarted
+        ) {
+            return;
+        }
+
+        analyticsState.engineStarted =
+            true;
+
+        trackEvent(
+            "engine_started",
+            {
+                marketplace:
+                    inputs.marketplace.value
+            }
+        );
+    }
+
+
+    function trackCompletedAnalysis() {
+
+        if (
+            !analyticsState.engineStarted
+        ) {
+            return;
+        }
+
+        const values =
+            getInputs();
+
+        const economics =
+            calculateEconomics(
+                values
+            );
+
+        const stress =
+            calculateStressTests(
+                values
+            );
+
+        const score =
+            calculateScore(
+                economics,
+                stress,
+                values.sellingPrice
+            );
+
+        const verdict =
+            getVerdict(
+                score.total,
+                economics,
+                values.sellingPrice
+            );
+
+        const verdictName =
+            verdictKey(
+                verdict.title
+            );
+
+        trackEvent(
+            "analysis_completed",
+            {
+                marketplace:
+                    values.marketplace,
+
+                opportunity_score:
+                    score.total,
+
+                profit_margin:
+                    Number.isFinite(
+                        economics.margin
+                    )
+                        ? Number(
+                            economics.margin.toFixed(
+                                1
+                            )
+                        )
+                        : 0,
+
+                roi:
+                    Number.isFinite(
+                        economics.roi
+                    )
+                        ? Number(
+                            economics.roi.toFixed(
+                                1
+                            )
+                        )
+                        : 0,
+
+                verdict:
+                    verdictName
+            }
+        );
+
+
+        if (
+            analyticsState.lastVerdict !==
+            verdictName
+        ) {
+
+            trackEvent(
+                "opportunity_verdict",
+                {
+                    marketplace:
+                        values.marketplace,
+
+                    opportunity_score:
+                        score.total,
+
+                    verdict:
+                        verdictName
+                }
+            );
+
+            analyticsState.lastVerdict =
+                verdictName;
+        }
+    }
+
+
+    function scheduleAnalysisTracking() {
+
+        if (
+            !analyticsState.engineStarted
+        ) {
+            return;
+        }
+
+        window.clearTimeout(
+            analyticsState.analysisTimer
+        );
+
+        analyticsState.analysisTimer =
+            window.setTimeout(
+                trackCompletedAnalysis,
+                800
+            );
+    }
+
+
+    /* =====================================================
        INPUT REFERENCES
     ====================================================== */
 
@@ -2380,6 +2564,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     /* =====================================================
+       ANALYTICS INTERACTIONS
+    ====================================================== */
+
+    const analyzerSection =
+        byId(
+            "analyzer"
+        );
+
+
+    if (
+        analyzerSection
+    ) {
+
+        const handleAnalyzerInteraction =
+            () => {
+
+                markEngineStarted();
+
+                scheduleAnalysisTracking();
+            };
+
+
+        analyzerSection.addEventListener(
+            "input",
+            handleAnalyzerInteraction
+        );
+
+        analyzerSection.addEventListener(
+            "change",
+            handleAnalyzerInteraction
+        );
+    }
+
+
+    if (
+        inputs.marketplace
+    ) {
+
+        inputs.marketplace.addEventListener(
+            "change",
+            () => {
+
+                markEngineStarted();
+
+                trackEvent(
+                    "marketplace_selected",
+                    {
+                        marketplace:
+                            inputs.marketplace.value
+                    }
+                );
+
+                scheduleAnalysisTracking();
+            }
+        );
+    }
+
+
+    /* =====================================================
        RESET
     ====================================================== */
 
@@ -2396,6 +2639,14 @@ document.addEventListener("DOMContentLoaded", () => {
         resetButton.addEventListener(
             "click",
             () => {
+
+                trackEvent(
+                    "reset_clicked",
+                    {
+                        marketplace:
+                            inputs.marketplace.value
+                    }
+                );
 
                 Object.entries(
                     defaults
